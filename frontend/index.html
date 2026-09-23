@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Percepta - Tapo CCTV Manager</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📹</text></svg>">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8' },
+            darkbg: '#0f172a',
+            darkcard: '#1e293b',
+            darkborder: '#334155'
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="bg-darkbg text-slate-100 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white">
+
+  <!-- Login Modal Overlay -->
+  <div id="login-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden">
+    <div class="bg-darkcard border border-darkborder rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl animate-fade-in">
+      <div class="flex items-center gap-3 mb-6">
+        <div class="p-3 bg-blue-600/20 text-blue-500 rounded-xl">
+          <i data-lucide="video" class="w-8 h-8"></i>
+        </div>
+        <div>
+          <h2 class="text-2xl font-bold tracking-tight">Percepta CCTV</h2>
+          <p class="text-xs text-slate-400">Tapo Footage Downloader & Manager</p>
+        </div>
+      </div>
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Username</label>
+          <input type="text" id="login-username" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 transition-colors" placeholder="admin">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Password</label>
+          <input type="password" id="login-password" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-500 transition-colors" placeholder="••••••••">
+        </div>
+        <div id="login-error" class="text-xs text-red-400 hidden"></div>
+        <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-xl transition-all shadow-lg shadow-blue-600/30 flex items-center justify-center gap-2">
+          <span>Sign In</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+        <p class="text-xs text-slate-500 text-center mt-2">Default credentials: admin / admin@123</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Main App Layout -->
+  <div id="app-root" class="flex flex-col flex-1 h-screen overflow-hidden">
+    
+    <!-- Top Navigation Header -->
+    <header class="h-16 border-b border-darkborder bg-darkcard/60 backdrop-blur-md px-6 flex items-center justify-between shrink-0">
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 bg-blue-600 text-white rounded-lg shadow-md shadow-blue-600/20">
+            <i data-lucide="cctv" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-lg leading-tight tracking-tight">Percepta</h1>
+            <p class="text-[10px] text-blue-400 font-medium uppercase tracking-wider">CCTV Automation</p>
+          </div>
+        </div>
+
+        <div class="h-6 w-px bg-darkborder mx-2"></div>
+
+        <!-- Sync Status Indicator Badge -->
+        <div id="top-sync-badge" class="flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-darkborder">
+          <span id="sync-dot" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="sync-msg">Sync: Idle</span>
+        </div>
+      </div>
+
+      <!-- Quick Resource Gauges (Pi Protection Status) -->
+      <div class="flex items-center gap-5">
+        <div class="hidden md:flex items-center gap-4 text-xs">
+          <!-- RAM Usage Indicator -->
+          <div class="flex items-center gap-2">
+            <i data-lucide="cpu" class="w-4 h-4 text-slate-400"></i>
+            <div>
+              <div class="flex justify-between gap-2 text-[11px]">
+                <span class="text-slate-400">RAM (Limit 90%):</span>
+                <span id="top-ram-val" class="font-semibold text-slate-200">0%</span>
+              </div>
+              <div class="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-0.5">
+                <div id="top-ram-bar" class="h-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Disk Storage Indicator -->
+          <div class="flex items-center gap-2">
+            <i data-lucide="hard-drive" class="w-4 h-4 text-slate-400"></i>
+            <div>
+              <div class="flex justify-between gap-2 text-[11px]">
+                <span class="text-slate-400">Storage:</span>
+                <span id="top-disk-val" class="font-semibold text-slate-200">0 GB Free</span>
+              </div>
+              <div class="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-0.5">
+                <div id="top-disk-bar" class="h-full bg-blue-500 transition-all duration-500" style="width: 0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- User Profile & Logout -->
+        <div class="flex items-center gap-3">
+          <div class="text-right hidden sm:block">
+            <p id="nav-username" class="text-xs font-semibold text-slate-200">admin</p>
+            <p id="nav-role" class="text-[10px] text-slate-400 uppercase">Administrator</p>
+          </div>
+          <button id="btn-logout" title="Sign Out" class="p-2 hover:bg-slate-800 text-slate-400 hover:text-red-400 rounded-lg transition-colors">
+            <i data-lucide="log-out" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Workspace with Sidebar & Content Area -->
+    <div class="flex flex-1 overflow-hidden">
+      
+      <!-- Sidebar Navigation -->
+      <aside class="w-60 border-r border-darkborder bg-darkcard/40 flex flex-col shrink-0">
+        <nav class="p-3 space-y-1 text-sm font-medium">
+          <button data-tab="tab-dashboard" class="nav-link active w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all">
+            <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+            <span>Dashboard</span>
+          </button>
+          <button data-tab="tab-recordings" class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all">
+            <i data-lucide="folder-video" class="w-4 h-4"></i>
+            <span>Recordings</span>
+          </button>
+          <button data-tab="tab-cameras" class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all">
+            <i data-lucide="camera" class="w-4 h-4"></i>
+            <span>Cameras</span>
+          </button>
+          <button data-tab="tab-settings" class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all">
+            <i data-lucide="sliders" class="w-4 h-4"></i>
+            <span>Storage & Sync</span>
+          </button>
+          <button data-tab="tab-github" class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all">
+            <i data-lucide="git-branch" class="w-4 h-4"></i>
+            <span>GitHub Backup</span>
+          </button>
+          <button data-tab="tab-logs" class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all">
+            <i data-lucide="terminal" class="w-4 h-4"></i>
+            <span>System Logs</span>
+          </button>
+          <button data-tab="tab-users" class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all">
+            <i data-lucide="users" class="w-4 h-4"></i>
+            <span>User Accounts</span>
+          </button>
+        </nav>
+
+        <div class="mt-auto p-4 border-t border-darkborder text-[11px] text-slate-500">
+          <p class="font-medium text-slate-400">Percepta CCTV v1.0</p>
+          <p>Multi-camera Tapo Engine</p>
+        </div>
+      </aside>
+
+      <!-- Viewports Content -->
+      <main class="flex-1 overflow-y-auto bg-darkbg p-6">
+
+        <!-- 1. DASHBOARD TAB -->
+        <section id="tab-dashboard" class="tab-content active space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-bold">System Overview</h2>
+              <p class="text-xs text-slate-400">Continuous health monitoring and camera status</p>
+            </div>
+            <button id="btn-sync-all-now" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center gap-2">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>Sync All Cameras Now</span>
+            </button>
+          </div>
+
+          <!-- Metrics Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-4 flex items-center gap-4">
+              <div class="p-3 bg-blue-600/10 text-blue-500 rounded-xl">
+                <i data-lucide="camera" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-xs text-slate-400 font-medium">Configured Cameras</p>
+                <h3 id="stat-cameras-count" class="text-2xl font-bold">0</h3>
+              </div>
+            </div>
+
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-4 flex items-center gap-4">
+              <div class="p-3 bg-emerald-600/10 text-emerald-500 rounded-xl">
+                <i data-lucide="film" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-xs text-slate-400 font-medium">Recorded Days</p>
+                <h3 id="stat-days-count" class="text-2xl font-bold">0</h3>
+              </div>
+            </div>
+
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-4 flex items-center gap-4">
+              <div class="p-3 bg-purple-600/10 text-purple-500 rounded-xl">
+                <i data-lucide="hard-drive" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-xs text-slate-400 font-medium">Storage Available</p>
+                <h3 id="stat-disk-free" class="text-2xl font-bold">-- GB</h3>
+              </div>
+            </div>
+
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-4 flex items-center gap-4">
+              <div class="p-3 bg-amber-600/10 text-amber-500 rounded-xl">
+                <i data-lucide="cpu" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <p class="text-xs text-slate-400 font-medium">Pi RAM Protection</p>
+                <h3 id="stat-ram-health" class="text-2xl font-bold text-emerald-400">Safe (&lt;90%)</h3>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active Cameras List Summary -->
+          <div class="bg-darkcard border border-darkborder rounded-2xl p-6">
+            <h3 class="font-bold text-sm text-slate-200 mb-4 flex items-center gap-2">
+              <i data-lucide="activity" class="w-4 h-4 text-blue-500"></i>
+              <span>Connected Cameras Status</span>
+            </h3>
+            <div id="dash-cameras-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. RECORDINGS BROWSER & VIDEO PLAYER TAB -->
+        <section id="tab-recordings" class="tab-content hidden h-[calc(100vh-7rem)] flex flex-col">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-xl font-bold">Footage Browser & Player</h2>
+              <p class="text-xs text-slate-400">Browse dates and cameras, watch footage with timeline seeking</p>
+            </div>
+            <button id="btn-refresh-recordings" class="bg-slate-800 hover:bg-slate-700 text-xs font-semibold px-3 py-2 rounded-xl transition-colors flex items-center gap-2">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Refresh Files</span>
+            </button>
+          </div>
+
+          <div class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
+            <!-- Left Column: Folder / File Tree Navigation -->
+            <div class="lg:col-span-5 bg-darkcard border border-darkborder rounded-2xl p-4 flex flex-col overflow-hidden">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-2">
+                <i data-lucide="folder-tree" class="w-4 h-4 text-blue-500"></i>
+                <span>Storage Structure ({YYYY-MM-DD} / {Camera})</span>
+              </h3>
+              
+              <div id="recordings-tree-container" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                <!-- Dynamically populated dates & cameras tree -->
+                <div class="text-center py-12 text-slate-500 text-xs">Loading footage directory...</div>
+              </div>
+            </div>
+
+            <!-- Right Column: HTML5 Video Player & Details -->
+            <div class="lg:col-span-7 bg-darkcard border border-darkborder rounded-2xl p-5 flex flex-col overflow-hidden">
+              <div class="flex items-center justify-between mb-3">
+                <div class="truncate">
+                  <h4 id="player-title" class="font-semibold text-sm truncate text-slate-200">No footage selected</h4>
+                  <p id="player-subtitle" class="text-xs text-slate-400 truncate">Select a clip from the tree to play</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <a id="btn-download-clip" href="#" download class="hidden bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    <span>Download</span>
+                  </a>
+                  <button id="btn-delete-clip" class="hidden bg-red-950/50 hover:bg-red-900/60 text-red-300 text-xs px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    <span>Delete</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Video Container -->
+              <div class="flex-1 bg-black rounded-xl overflow-hidden flex items-center justify-center relative min-h-[300px]">
+                <video id="main-video-player" controls preload="metadata" class="w-full h-full object-contain">
+                  <source id="video-source" src="" type="video/mp4">
+                  Your browser does not support HTML5 video playback.
+                </video>
+                <div id="video-placeholder" class="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-slate-500">
+                  <i data-lucide="play-circle" class="w-16 h-16 stroke-1 mb-2 text-slate-600"></i>
+                  <p class="text-xs">Select any recording to stream</p>
+                </div>
+              </div>
+
+              <!-- Playback Details & Time Display -->
+              <div class="mt-3 pt-3 border-t border-darkborder flex items-center justify-between text-xs text-slate-400">
+                <div class="flex items-center gap-2">
+                  <i data-lucide="clock" class="w-3.5 h-3.5 text-blue-400"></i>
+                  <span id="player-time-range">--:--:--</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-slate-500">Speed:</span>
+                  <select id="playback-speed" class="bg-slate-900 border border-darkborder rounded px-2 py-0.5 text-xs text-slate-300">
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1.0x (Normal)</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2.0x</option>
+                    <option value="4">4.0x</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. CAMERAS TAB -->
+        <section id="tab-cameras" class="tab-content hidden space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-bold">Camera Management</h2>
+              <p class="text-xs text-slate-400">Add Tapo cameras; folders will automatically be created per camera name</p>
+            </div>
+            <button id="btn-open-add-camera" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center gap-2">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Add Tapo Camera</span>
+            </button>
+          </div>
+
+          <div id="cameras-table-container" class="bg-darkcard border border-darkborder rounded-2xl overflow-hidden shadow-sm">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-900/60 uppercase font-semibold text-slate-400 border-b border-darkborder">
+                <tr>
+                  <th class="px-5 py-3.5">Camera Name</th>
+                  <th class="px-5 py-3.5">IP Address</th>
+                  <th class="px-5 py-3.5">Window Size</th>
+                  <th class="px-5 py-3.5">Status</th>
+                  <th class="px-5 py-3.5">Last Sync</th>
+                  <th class="px-5 py-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="cameras-table-body" class="divide-y divide-darkborder">
+                <!-- Dynamically populated -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 4. STORAGE & SYNC SETTINGS TAB -->
+        <section id="tab-settings" class="tab-content hidden space-y-6">
+          <div>
+            <h2 class="text-xl font-bold">Storage & Scheduling Settings</h2>
+            <p class="text-xs text-slate-400">Configure external drive path, weekly zip archiving, and memory protection</p>
+          </div>
+
+          <form id="settings-form" class="space-y-6 max-w-3xl">
+            <!-- Storage Destination Card -->
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
+              <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                <i data-lucide="hard-drive" class="w-4 h-4 text-blue-500"></i>
+                <span>Storage Location & Connected Disks</span>
+              </h3>
+              <div>
+                <label class="block text-xs font-semibold uppercase text-slate-400 mb-1.5">Storage Root Directory (Container Path)</label>
+                <input type="text" id="setting-storage-path" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500 transition-colors" placeholder="/storage">
+                <p class="text-[11px] text-slate-500 mt-1">Footage and logs are saved here. If mounting an external USB drive or SSD on your Raspberry Pi, map it to <code>/storage</code> in docker-compose.</p>
+              </div>
+            </div>
+
+            <!-- Raspberry Pi Memory Safeguard Card -->
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
+              <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                <i data-lucide="shield-alert" class="w-4 h-4 text-amber-500"></i>
+                <span>Raspberry Pi Memory Safeguard</span>
+              </h3>
+              <div>
+                <div class="flex justify-between items-center mb-1.5">
+                  <label class="text-xs font-semibold uppercase text-slate-400">Maximum RAM Utilization Threshold</label>
+                  <span id="label-ram-limit" class="text-xs font-bold text-amber-400">90%</span>
+                </div>
+                <input type="range" id="setting-ram-limit" min="50" max="95" step="1" value="90" class="w-full accent-amber-500 cursor-pointer">
+                <p class="text-[11px] text-slate-500 mt-1">If system memory reaches this percentage, footage downloading automatically pauses and throttles to prevent Raspberry Pi system crashes.</p>
+              </div>
+            </div>
+
+            <!-- Sync Schedule Card -->
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
+              <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                <i data-lucide="calendar-clock" class="w-4 h-4 text-emerald-500"></i>
+                <span>Automated Daily Sync Timing</span>
+              </h3>
+              <div class="flex items-center gap-3">
+                <input type="checkbox" id="setting-schedule-enabled" class="rounded accent-blue-600 w-4 h-4">
+                <label for="setting-schedule-enabled" class="text-xs font-medium text-slate-300">Enable Automated Scheduled Syncing</label>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Schedule Mode</label>
+                  <select id="setting-schedule-mode" class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm focus:outline-none">
+                    <option value="daily">Daily at Specific Time</option>
+                    <option value="interval">Every N Hours</option>
+                  </select>
+                </div>
+                <div id="wrap-schedule-time">
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Daily Time (HH:MM)</label>
+                  <input type="time" id="setting-schedule-time" class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm">
+                </div>
+                <div id="wrap-schedule-interval" class="hidden">
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Interval (Hours)</label>
+                  <input type="number" id="setting-schedule-interval" min="1" max="24" class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm">
+                </div>
+              </div>
+            </div>
+
+            <!-- Storage Lifecycle Card (Weekly Zip & 1 Month Purge) -->
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
+              <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                <i data-lucide="archive" class="w-4 h-4 text-purple-500"></i>
+                <span>Lifecycle Management (Weekly Zip & Retention)</span>
+              </h3>
+              <div class="space-y-3">
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" id="setting-weekly-zip" class="rounded accent-blue-600 w-4 h-4">
+                  <label for="setting-weekly-zip" class="text-xs font-medium text-slate-300">End of week: Compress last week's footage into ZIP archive</label>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Retention Policy (Days to keep footage)</label>
+                  <input type="number" id="setting-retention-days" min="7" max="365" class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm" placeholder="30">
+                  <p class="text-[11px] text-slate-500 mt-1">Footage and archives older than this (default 30 days / 1 month) are automatically purged.</p>
+                </div>
+                <div class="pt-2 flex gap-3">
+                  <button type="button" id="btn-manual-archive" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-xl transition-colors">Zip Last Week Now</button>
+                  <button type="button" id="btn-manual-cleanup" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-2 rounded-xl transition-colors">Run Retention Purge Now</button>
+                </div>
+              </div>
+            </div>
+
+            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-6 py-2.5 rounded-xl transition-all shadow-md shadow-blue-600/20">
+              Save Settings
+            </button>
+          </form>
+        </section>
+
+        <!-- 5. GITHUB BACKUP TAB -->
+        <section id="tab-github" class="tab-content hidden space-y-6">
+          <div>
+            <h2 class="text-xl font-bold">GitHub Automated Backup</h2>
+            <p class="text-xs text-slate-400">Automatically backup application code and database schema every week</p>
+          </div>
+
+          <div class="max-w-3xl space-y-6">
+            <!-- Configuration Form -->
+            <form id="github-form" class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
+              <div class="flex items-center justify-between pb-3 border-b border-darkborder">
+                <div class="flex items-center gap-3">
+                  <input type="checkbox" id="gh-backup-enabled" class="rounded accent-blue-600 w-4 h-4">
+                  <label for="gh-backup-enabled" class="text-xs font-medium text-slate-300">Automated Weekly Sunday Code Backup</label>
+                </div>
+                <button type="button" id="btn-backup-github-now" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center gap-2">
+                  <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+                  <span>Backup to GitHub Now</span>
+                </button>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">GitHub Repository URL</label>
+                <input type="text" id="gh-repo-url" class="w-full bg-slate-900 border border-darkborder rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="https://github.com/your-username/percepta-backup.git">
+                <p class="text-[11px] text-slate-500 mt-1">Create an empty private repository on GitHub and paste its HTTPS clone URL here.</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">GitHub Personal Access Token (PAT)</label>
+                <input type="password" id="gh-token" class="w-full bg-slate-900 border border-darkborder rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="ghp_••••••••••••••••••••••••••••••••••••">
+                <p class="text-[11px] text-slate-500 mt-1">Generate a Classic or Fine-grained Personal Access Token on GitHub with <code>repo</code> permissions.</p>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Target Branch</label>
+                <input type="text" id="gh-branch" class="w-full bg-slate-900 border border-darkborder rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500" placeholder="main">
+              </div>
+
+              <div class="pt-2">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-5 py-2.5 rounded-xl transition-all shadow-md shadow-blue-600/20">
+                  Save GitHub Settings
+                </button>
+              </div>
+            </form>
+
+            <!-- Guide / Status Card -->
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-3">
+              <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                <i data-lucide="help-circle" class="w-4 h-4 text-blue-500"></i>
+                <span>How GitHub Backup Works</span>
+              </h3>
+              <ul class="text-xs text-slate-400 space-y-2 list-disc list-inside">
+                <li>Backs up the complete application source code, Docker configs, scripts, and documentation.</li>
+                <li>Video footages and SQLite database binaries are safely ignored via <code>.gitignore</code> to preserve repository limits.</li>
+                <li>Runs automatically every Sunday at 01:00 AM (or on-demand anytime via the button above).</li>
+              </ul>
+              <div id="gh-last-status" class="mt-4 p-3 bg-slate-900 rounded-xl text-xs text-slate-400 border border-darkborder">
+                Last Backup: <span id="gh-last-time" class="font-semibold text-slate-300">Never</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. SYSTEM LOGS TAB -->
+        <section id="tab-logs" class="tab-content hidden h-[calc(100vh-7rem)] flex flex-col">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-xl font-bold">System & Sync Logs</h2>
+              <p class="text-xs text-slate-400">Stored on footage disk at <code>{storage_path}/logs/percepta.log</code></p>
+            </div>
+            <div class="flex items-center gap-3">
+              <select id="log-filter-level" class="bg-darkcard border border-darkborder rounded-xl px-3 py-1.5 text-xs text-slate-300">
+                <option value="">All Levels</option>
+                <option value="INFO">INFO</option>
+                <option value="WARNING">WARNING</option>
+                <option value="ERROR">ERROR</option>
+              </select>
+              <button id="btn-refresh-logs" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Refresh</span>
+              </button>
+              <button id="btn-clear-logs" class="bg-red-950/40 hover:bg-red-900/50 text-red-300 text-xs px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span>Clear</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex-1 bg-slate-950 border border-darkborder rounded-2xl p-4 font-mono text-xs overflow-y-auto" id="log-terminal">
+            <div class="text-slate-500">Loading logs...</div>
+          </div>
+        </section>
+
+        <!-- 7. USER MANAGEMENT TAB -->
+        <section id="tab-users" class="tab-content hidden space-y-6">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-bold">User Management</h2>
+              <p class="text-xs text-slate-400">Manage login credentials and user access permissions</p>
+            </div>
+            <button id="btn-open-add-user" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-4 py-2.5 rounded-xl transition-all shadow-md shadow-blue-600/20 flex items-center gap-2">
+              <i data-lucide="user-plus" class="w-4 h-4"></i>
+              <span>Add User</span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Users List Table -->
+            <div class="lg:col-span-2 bg-darkcard border border-darkborder rounded-2xl overflow-hidden shadow-sm">
+              <table class="w-full text-left text-xs">
+                <thead class="bg-slate-900/60 uppercase font-semibold text-slate-400 border-b border-darkborder">
+                  <tr>
+                    <th class="px-5 py-3.5">Username</th>
+                    <th class="px-5 py-3.5">Role</th>
+                    <th class="px-5 py-3.5">Created At</th>
+                    <th class="px-5 py-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="users-table-body" class="divide-y divide-darkborder">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Change My Password Card -->
+            <div class="bg-darkcard border border-darkborder rounded-2xl p-6 space-y-4">
+              <h3 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+                <i data-lucide="key" class="w-4 h-4 text-blue-500"></i>
+                <span>Change Password</span>
+              </h3>
+              <form id="change-pwd-form" class="space-y-3">
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Current Password</label>
+                  <input type="password" id="pwd-old" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-xs">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">New Password</label>
+                  <input type="password" id="pwd-new" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-xs">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 rounded-xl text-xs transition-colors">
+                  Update Password
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Camera Modal (Add / Edit) -->
+  <div id="camera-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden">
+    <div class="bg-darkcard border border-darkborder rounded-2xl p-6 max-w-lg w-full mx-4 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="camera-modal-title" class="text-lg font-bold">Add Tapo Camera</h3>
+        <button id="btn-close-camera-modal" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="camera-form" class="space-y-4 text-xs">
+        <input type="hidden" id="cam-id">
+        <div>
+          <label class="block font-semibold uppercase text-slate-400 mb-1">Camera Name (Folder Name)</label>
+          <input type="text" id="cam-name" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm" placeholder="e.g. Front_Door">
+          <p class="text-[10px] text-slate-500 mt-0.5">Footage will be saved under: <code>{date}/{CameraName}/</code></p>
+        </div>
+
+        <div>
+          <label class="block font-semibold uppercase text-slate-400 mb-1">Camera IP Address</label>
+          <input type="text" id="cam-ip" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm" placeholder="192.168.1.109">
+        </div>
+
+        <div>
+          <label class="block font-semibold uppercase text-slate-400 mb-1">Tapo Cloud Password (Required for Stream Decryption)</label>
+          <input type="password" id="cam-cloud-password" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm" placeholder="••••••••">
+          <p class="text-[10px] text-slate-500 mt-0.5">The password of your TP-Link Tapo cloud account.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold uppercase text-slate-400 mb-1">Camera Account User (Optional)</label>
+            <input type="text" id="cam-user" class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm" placeholder="admin">
+          </div>
+          <div>
+            <label class="block font-semibold uppercase text-slate-400 mb-1">Camera Account Pass (Optional)</label>
+            <input type="password" id="cam-password" class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm" placeholder="••••••••">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold uppercase text-slate-400 mb-1">Network Window Size (Wi-Fi buffer tuning)</label>
+          <input type="number" id="cam-window-size" value="50" min="10" max="500" class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm">
+          <p class="text-[10px] text-slate-500 mt-0.5">Recommended 50 for stable Wi-Fi transfers on Raspberry Pi.</p>
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="cam-enabled" checked class="rounded accent-blue-600 w-4 h-4">
+          <label for="cam-enabled" class="text-slate-300">Camera Enabled for Automatic Syncing</label>
+        </div>
+
+        <div id="cam-test-result" class="text-xs p-2.5 rounded-xl hidden"></div>
+
+        <div class="flex items-center justify-between pt-3 border-t border-darkborder">
+          <button type="button" id="btn-test-camera" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-xl transition-colors">
+            Test Connection
+          </button>
+          <div class="flex gap-2">
+            <button type="button" id="btn-cancel-cam-modal" class="bg-transparent hover:bg-slate-800 px-4 py-2 rounded-xl text-slate-300">Cancel</button>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-5 py-2 rounded-xl shadow-md shadow-blue-600/20">Save</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div id="user-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm hidden">
+    <div class="bg-darkcard border border-darkborder rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="text-lg font-bold">Create User Account</h3>
+        <button id="btn-close-user-modal" class="text-slate-400 hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="user-form" class="space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold uppercase text-slate-400 mb-1">Username</label>
+          <input type="text" id="user-name-input" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block font-semibold uppercase text-slate-400 mb-1">Password</label>
+          <input type="password" id="user-password-input" required class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block font-semibold uppercase text-slate-400 mb-1">Role</label>
+          <select id="user-role-input" class="w-full bg-slate-900 border border-darkborder rounded-xl px-3 py-2 text-sm">
+            <option value="admin">Admin</option>
+            <option value="viewer">Viewer</option>
+          </select>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3 border-t border-darkborder">
+          <button type="button" id="btn-cancel-user-modal" class="bg-transparent hover:bg-slate-800 px-4 py-2 rounded-xl text-slate-300">Cancel</button>
+          <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-5 py-2 rounded-xl">Create</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

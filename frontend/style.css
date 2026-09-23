@@ -1,0 +1,79 @@
+/* Custom styling for Percepta */
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Navigation Link States */
+.nav-link {
+  color: #94a3b8;
+}
+
+.nav-link:hover {
+  color: #f1f5f9;
+  background-color: rgba(30, 41, 59, 0.7);
+}
+
+.nav-link.active {
+  color: #ffffff;
+  background-color: #2563eb;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+/* Tree view styling */
+.tree-node-date {
+  border-left: 2px solid #334155;
+  margin-left: 0.5rem;
+  padding-left: 0.75rem;
+}
+
+.tree-file-item:hover {
+  background-color: rgba(51, 65, 85, 0.5);
+}
+
+.tree-file-item.selected {
+  background-color: rgba(37, 99, 235, 0.25);
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
+/* Terminal Log Formatting */
+#log-terminal {
+  scrollbar-color: #334155 #020617;
+}
+
+.log-info {
+  color: #93c5fd;
+}
+
+.log-warning {
+  color: #fde047;
+}
+
+.log-error {
+  color: #f87171;
+  font-weight: 600;
+}
