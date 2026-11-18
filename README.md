@@ -10,7 +10,6 @@
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Raspberry Pi](https://img.shields.io/badge/Raspberry%20Pi-Optimized-C51A4A?style=for-the-badge&logo=raspberry-pi&logoColor=white)](https://www.raspberrypi.com/)
-[![License](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](LICENSE)
 
 <br/>
 
@@ -315,9 +314,7 @@ Or view them inside the storage disk at <code>/storage/logs/percepta.log</code>.
 
 ---
 
-## 📄 License
 
-Distributed under the **MIT License**. See `LICENSE` for more information.
 
 <div align="center">
 
